@@ -89,8 +89,10 @@ func updatePrayerTimes(scheduler *gocron.Scheduler) {
 
 	// Configure calculation parameters using builder
 	params := calc.NewCalculationParametersBuilder().
-		SetMadhab(calc.HANAFI).
-		SetMethod(calc.MUSLIM_WORLD_LEAGUE).
+		SetMadhab(calc.SHAFI_HANBALI_MALIKI).
+		SetFajrAngle(18.0).
+		SetIshaAngle(17.0).
+		SetMethodAdjustments(calc.PrayerAdjustments{SunriseAdj: -7, DhuhrAdj: 5, AsrAdj: 4, MaghribAdj: 7}).
 		Build()
 
 	// Calculate prayer times
@@ -131,8 +133,8 @@ func main() {
 	})
 
 	// Run initial test and setup
-	testAudioOutput()
 	updatePrayerTimes(scheduler)
+	testAudioOutput()
 
 	// Start the scheduler
 	scheduler.StartBlocking()
