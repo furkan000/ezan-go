@@ -1,4 +1,4 @@
-module ezan-go
+module ezan
 
 go 1.22.2
 

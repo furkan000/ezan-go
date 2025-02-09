@@ -15,7 +15,7 @@ import (
 	util "github.com/mnadev/adhango/pkg/util"
 )
 
-// AdhanAudioFiles maps prayer names to their audio file paths
+// AdhanAudioFiles maps prayer names to their audio file paths.
 var adhanAudioFiles = map[string]string{
 	"fajr":    "audio/ezan1.mp3",
 	"dhuhr":   "audio/ezan2.mp3",
@@ -24,7 +24,7 @@ var adhanAudioFiles = map[string]string{
 	"isha":    "audio/ezan5.mp3",
 }
 
-// playAudio plays the specified MP3 file
+// playAudio plays the specified MP3 file.
 func playAudio(filepath string) error {
 	f, err := os.Open(filepath)
 	if err != nil {
@@ -52,7 +52,7 @@ func playAudio(filepath string) error {
 	return nil
 }
 
-// testAudioOutput tests the audio system by playing the Fajr adhan
+// testAudioOutput tests the audio system by playing the Fajr adhan.
 func testAudioOutput() {
 	fmt.Println("🔊 Testing audio output...")
 	err := playAudio(adhanAudioFiles["fajr"])
@@ -63,31 +63,37 @@ func testAudioOutput() {
 	}
 }
 
-// scheduleAdhan schedules the adhan playback for a specific prayer
+// scheduleAdhan schedules the adhan playback for a specific prayer.
+// The job is tagged "adhan" so that we can later remove only these jobs.
 func scheduleAdhan(scheduler *gocron.Scheduler, prayerName string, prayerTime time.Time) {
-	scheduler.At(prayerTime.Format("15:04")).Do(func() {
-		fmt.Printf("📢 Playing %s Adhan at %v\n", prayerName, prayerTime)
-		err := playAudio(adhanAudioFiles[prayerName])
-		if err != nil {
-			log.Printf("❌ Error playing %s Adhan: %v\n", prayerName, err)
-		}
-	})
+	fmt.Printf("🕰️ Scheduling %s Adhan at %v\n", prayerName, prayerTime)
+	// Use seconds precision in the formatted time.
+	scheduler.Every(1).Day().LimitRunsTo(1).
+		At(prayerTime.Format("15:04:05")).
+		Tag("adhan"). // Tag the job for later removal.
+		Do(func() {
+			fmt.Printf("📢 Playing %s Adhan at %v\n", prayerName, prayerTime)
+			err := playAudio(adhanAudioFiles[prayerName])
+			if err != nil {
+				log.Printf("❌ Error playing %s Adhan: %v\n", prayerName, err)
+			}
+		})
 }
 
-// updatePrayerTimes calculates and schedules prayer times for the current day
+// updatePrayerTimes calculates and schedules prayer times for the current day.
 func updatePrayerTimes(scheduler *gocron.Scheduler) {
-	// Define coordinates for Berlin
+	// Define coordinates for Berlin.
 	coords, err := util.NewCoordinates(52.52, 13.405)
 	if err != nil {
 		log.Printf("Error creating coordinates: %v", err)
 		return
 	}
 
-	// Get current date
+	// Get current date.
 	currentDate := time.Now()
 	date := data.NewDateComponents(currentDate)
 
-	// Configure calculation parameters using builder
+	// Configure calculation parameters using builder.
 	params := calc.NewCalculationParametersBuilder().
 		SetMadhab(calc.SHAFI_HANBALI_MALIKI).
 		SetFajrAngle(18.0).
@@ -95,14 +101,14 @@ func updatePrayerTimes(scheduler *gocron.Scheduler) {
 		SetMethodAdjustments(calc.PrayerAdjustments{SunriseAdj: -7, DhuhrAdj: 5, AsrAdj: 4, MaghribAdj: 7}).
 		Build()
 
-	// Calculate prayer times
+	// Calculate prayer times.
 	prayerTimes, err := calc.NewPrayerTimes(coords, date, params)
 	if err != nil {
 		log.Printf("Error calculating prayer times: %v", err)
 		return
 	}
 
-	// Set timezone to local
+	// Set timezone to local.
 	err = prayerTimes.SetTimeZone(currentDate.Location().String())
 	if err != nil {
 		log.Printf("Error setting timezone: %v", err)
@@ -116,7 +122,10 @@ func updatePrayerTimes(scheduler *gocron.Scheduler) {
 	fmt.Printf("🌇 Maghrib: %v\n", prayerTimes.Maghrib)
 	fmt.Printf("🌙 Isha: %v\n", prayerTimes.Isha)
 
-	// Schedule each prayer time
+	// Remove only the prayer time jobs (tagged "adhan").
+	scheduler.RemoveByTag("adhan")
+
+	// Schedule each prayer time.
 	scheduleAdhan(scheduler, "fajr", prayerTimes.Fajr)
 	scheduleAdhan(scheduler, "dhuhr", prayerTimes.Dhuhr)
 	scheduleAdhan(scheduler, "asr", prayerTimes.Asr)
@@ -124,18 +133,28 @@ func updatePrayerTimes(scheduler *gocron.Scheduler) {
 	scheduleAdhan(scheduler, "isha", prayerTimes.Isha)
 }
 
+func testThreeSecondsFromNow(scheduler *gocron.Scheduler) {
+	// Schedule a test job 3 seconds from now.
+	t := time.Now().Add(3 * time.Second)
+	fmt.Println("Scheduled time:", t)
+	scheduleAdhan(scheduler, "fajr", t)
+}
+
 func main() {
 	scheduler := gocron.NewScheduler(time.Local)
 
-	// Schedule daily update at midnight
+	// Schedule daily update at midnight.
 	scheduler.Every(1).Day().At("00:00").Do(func() {
 		updatePrayerTimes(scheduler)
 	})
 
-	// Run initial test and setup
+	// Run initial update.
 	updatePrayerTimes(scheduler)
-	testAudioOutput()
 
-	// Start the scheduler
+	// Optional Tests
+	// testThreeSecondsFromNow(scheduler)
+	// testAudioOutput()
+
+	// Start the scheduler (blocking call).
 	scheduler.StartBlocking()
 }
