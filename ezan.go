@@ -22,6 +22,7 @@ var adhanAudioFiles = map[string]string{
 	"asr":     "audio/ezan3.mp3",
 	"maghrib": "audio/ezan4.mp3",
 	"isha":    "audio/ezan5.mp3",
+	"test":    "audio/test.mp3",
 }
 
 // playAudio plays the specified MP3 file.
@@ -55,11 +56,11 @@ func playAudio(filepath string) error {
 // testAudioOutput tests the audio system by playing the Fajr adhan.
 func testAudioOutput() {
 	fmt.Println("🔊 Testing audio output...")
-	err := playAudio(adhanAudioFiles["fajr"])
+	err := playAudio(adhanAudioFiles["test"])
 	if err != nil {
 		log.Printf("❌ Audio test failed: %v\n", err)
 	} else {
-		fmt.Println("✅ Audio test successful! Fajr Adhan played.")
+		fmt.Println("✅ Audio test successful! Test played.")
 	}
 }
 
@@ -153,7 +154,7 @@ func main() {
 
 	// Optional Tests
 	// testThreeSecondsFromNow(scheduler)
-	// testAudioOutput()
+	testAudioOutput()
 
 	// Start the scheduler (blocking call).
 	scheduler.StartBlocking()

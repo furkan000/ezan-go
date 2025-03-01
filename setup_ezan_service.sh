@@ -17,7 +17,7 @@ fi
 cat <<EOF > "$SERVICE_FILE"
 [Unit]
 Description=Ezan Service with Audio
-After=sound.target network.target
+After=sound.target
 
 [Service]
 ExecStart=$(realpath $EXECUTABLE)
@@ -25,11 +25,16 @@ WorkingDirectory=$(pwd)
 Restart=always
 User=$USER_NAME
 Group=$USER_NAME
-PAMName=login
-Environment="AUDIO_DIR=${AUDIO_DIR}"
-Environment="XDG_RUNTIME_DIR=/run/user/\$(id -u $USER_NAME)"
-Environment="DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/\$(id -u $USER_NAME)/bus"
-Environment="PULSE_SERVER=unix:/run/user/\$(id -u $USER_NAME)/pulse/native"
+#PAMName=login
+#Environment="DISPLAY=:0
+#Environment="AUDIO_DIR=${AUDIO_DIR}"
+#Environment="XDG_RUNTIME_DIR=/run/user/1000"
+#Environment="PULSE_RUNTIME_PATH=/run/user/1000/pulse/"
+#Environment="DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/\$(id -u $USER_NAME)/bus"
+#Environment="PULSE_SERVER=/run/user/\$(id -u $USER_NAME)/pulse/native"
+Environment="XDG_RUNTIME_DIR=/run/user/1000"
+Environment="PULSE_SERVER=/run/user/1000/pulse/native"
+ExecStartPre=/bin/sleep 60
 
 [Install]
 WantedBy=default.target
