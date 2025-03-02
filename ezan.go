@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/faiface/beep"
+	"github.com/faiface/beep/effects"
 	"github.com/faiface/beep/mp3"
 	"github.com/faiface/beep/speaker"
 	calc "github.com/furkan000/adhango/pkg/calc"
@@ -20,6 +21,19 @@ var (
 	coordinates, _ = util.NewCoordinates(52.52, 13.405)
 	// Toggle for playing prayer after adhan
 	playPrayerAfterAdhan = true
+	// Prayer calculation method and madhab
+	calculationMethod = calc.TURKEY
+	madhab            = calc.SHAFI_HANBALI_MALIKI
+	// Volume settings for each audio file (in percentage)
+	audioVolumes = map[string]float64{
+		"fajr":    100,
+		"dhuhr":   100,
+		"asr":     100,
+		"maghrib": 100,
+		"isha":    100,
+		"test":    100,
+		"prayer":  100,
+	}
 )
 
 // audioFiles maps prayer names to their audio file paths.
@@ -33,8 +47,8 @@ var audioFiles = map[string]string{
 	"prayer":  "audio/prayer.mp3",
 }
 
-// playAudio plays the specified MP3 file.
-func playAudio(filepath string) error {
+// playAudio plays the specified MP3 file with volume adjustment.
+func playAudio(filepath string, audioType string) error {
 	f, err := os.Open(filepath)
 	if err != nil {
 		return fmt.Errorf("error opening audio file: %v", err)
@@ -52,8 +66,19 @@ func playAudio(filepath string) error {
 		return fmt.Errorf("error initializing speaker: %v", err)
 	}
 
+	// Calculate volume adjustment
+	// Convert percentage to logarithmic scale where:
+	// 0% = silence (very low volume, -4 is approximately -96dB)
+	// 100% = normal volume (0 dB, no change)
+	volume := audioVolumes[audioType]
+	volumeAdjusted := &effects.Volume{
+		Streamer: streamer,
+		Base:     2,
+		Volume:   -4 + (volume / 100.0 * 4), // Scale from -4 to 0
+	}
+
 	done := make(chan bool)
-	speaker.Play(beep.Seq(streamer, beep.Callback(func() {
+	speaker.Play(beep.Seq(volumeAdjusted, beep.Callback(func() {
 		done <- true
 	})))
 
@@ -64,7 +89,7 @@ func playAudio(filepath string) error {
 // testAudioOutput tests the audio system by playing the Fajr adhan.
 func testAudioOutput() {
 	fmt.Println("🔊 Testing audio output...")
-	err := playAudio(audioFiles["test"])
+	err := playAudio(audioFiles["test"], "test")
 	if err != nil {
 		log.Printf("❌ Audio test failed: %v\n", err)
 	} else {
@@ -82,7 +107,7 @@ func scheduleAdhan(scheduler *gocron.Scheduler, prayerName string, prayerTime ti
 		Tag("adhan"). // Tag the job for later removal.
 		Do(func() {
 			fmt.Printf("📢 Playing %s Adhan at %v\n", prayerName, prayerTime)
-			err := playAudio(audioFiles[prayerName])
+			err := playAudio(audioFiles[prayerName], prayerName)
 			if err != nil {
 				log.Printf("❌ Error playing %s Adhan: %v\n", prayerName, err)
 				return
@@ -91,7 +116,7 @@ func scheduleAdhan(scheduler *gocron.Scheduler, prayerName string, prayerTime ti
 			// Play prayer after adhan only for the five daily prayers if enabled
 			if prayerName != "test" && playPrayerAfterAdhan {
 				fmt.Printf("🤲 Playing prayer after %s Adhan\n", prayerName)
-				err = playAudio(audioFiles["prayer"])
+				err = playAudio(audioFiles["prayer"], "prayer")
 				if err != nil {
 					log.Printf("❌ Error playing prayer after %s Adhan: %v\n", prayerName, err)
 				}
@@ -109,8 +134,8 @@ func updatePrayerTimes(scheduler *gocron.Scheduler) {
 
 	// Configure calculation parameters using builder.
 	params := calc.NewCalculationParametersBuilder().
-		SetMadhab(calc.SHAFI_HANBALI_MALIKI).
-		SetMethod(calc.TURKEY).
+		SetMadhab(madhab).
+		SetMethod(calculationMethod).
 		Build()
 
 	// Calculate prayer times.
