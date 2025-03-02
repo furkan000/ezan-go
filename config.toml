@@ -1,0 +1,14 @@
+lan = 52.52
+lon = 13.405
+calculation_method = "TURKEY"
+
+adhan_prayer = true
+
+[volume]
+fajr = 100
+dhur = 70
+asr = 75
+maghrib = 85
+isha = 90
+adhan_prayer = 100
+sela = 50

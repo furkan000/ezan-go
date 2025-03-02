@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/BurntSushi/toml"
 	"github.com/faiface/beep"
 	"github.com/faiface/beep/effects"
 	"github.com/faiface/beep/mp3"
@@ -16,25 +17,35 @@ import (
 	"github.com/go-co-op/gocron"
 )
 
+type Config struct {
+	Lan               float64 `toml:"lan"`
+	Lon               float64 `toml:"lon"`
+	CalculationMethod string  `toml:"calculation_method"`
+	AdhanPrayer       bool    `toml:"adhan_prayer"`
+	Volume            struct {
+		Fajr        float64 `toml:"fajr"`
+		Dhuhr       float64 `toml:"dhur"`
+		Asr         float64 `toml:"asr"`
+		Maghrib     float64 `toml:"maghrib"`
+		Isha        float64 `toml:"isha"`
+		AdhanPrayer float64 `toml:"adhan_prayer"`
+		Sela        float64 `toml:"sela"`
+	} `toml:"volume"`
+}
+
 var (
-	scheduler      = gocron.NewScheduler(time.Local)
-	coordinates, _ = util.NewCoordinates(52.52, 13.405)
-	// Toggle for playing prayer after adhan
-	playPrayerAfterAdhan = true
-	// Prayer calculation method and madhab
-	calculationMethod = calc.TURKEY
-	madhab            = calc.SHAFI_HANBALI_MALIKI
-	// Volume settings for each audio file (in percentage)
-	audioVolumes = map[string]float64{
-		"fajr":    100,
-		"dhuhr":   100,
-		"asr":     100,
-		"maghrib": 100,
-		"isha":    100,
-		"test":    100,
-		"prayer":  100,
-	}
+	scheduler   = gocron.NewScheduler(time.Local)
+	config      Config
+	madhab      = calc.SHAFI_HANBALI_MALIKI
+	coordinates *util.Coordinates
 )
+
+func loadConfig() error {
+	if _, err := toml.DecodeFile("config.toml", &config); err != nil {
+		return fmt.Errorf("error loading config: %v", err)
+	}
+	return nil
+}
 
 // audioFiles maps prayer names to their audio file paths.
 var audioFiles = map[string]string{
@@ -45,6 +56,29 @@ var audioFiles = map[string]string{
 	"isha":    "audio/ezan5.mp3",
 	"test":    "audio/test.mp3",
 	"prayer":  "audio/prayer.mp3",
+	"sela":    "audio/sela.mp3",
+}
+
+// getVolumeForPrayer returns the volume for a specific prayer type
+func getVolumeForPrayer(prayerType string) float64 {
+	switch prayerType {
+	case "fajr":
+		return config.Volume.Fajr
+	case "dhuhr":
+		return config.Volume.Dhuhr
+	case "asr":
+		return config.Volume.Asr
+	case "maghrib":
+		return config.Volume.Maghrib
+	case "isha":
+		return config.Volume.Isha
+	case "prayer":
+		return config.Volume.AdhanPrayer
+	case "sela":
+		return config.Volume.Sela
+	default:
+		return 100 // Default volume for test and unknown types
+	}
 }
 
 // playAudio plays the specified MP3 file with volume adjustment.
@@ -70,7 +104,7 @@ func playAudio(filepath string, audioType string) error {
 	// Convert percentage to logarithmic scale where:
 	// 0% = silence (very low volume, -4 is approximately -96dB)
 	// 100% = normal volume (0 dB, no change)
-	volume := audioVolumes[audioType]
+	volume := getVolumeForPrayer(audioType)
 	volumeAdjusted := &effects.Volume{
 		Streamer: streamer,
 		Base:     2,
@@ -89,7 +123,7 @@ func playAudio(filepath string, audioType string) error {
 // testAudioOutput tests the audio system by playing the Fajr adhan.
 func testAudioOutput() {
 	fmt.Println("🔊 Testing audio output...")
-	err := playAudio(audioFiles["test"], "test")
+	err := playAudio(audioFiles["fajr"], "fajr")
 	if err != nil {
 		log.Printf("❌ Audio test failed: %v\n", err)
 	} else {
@@ -114,7 +148,7 @@ func scheduleAdhan(scheduler *gocron.Scheduler, prayerName string, prayerTime ti
 			}
 
 			// Play prayer after adhan only for the five daily prayers if enabled
-			if prayerName != "test" && playPrayerAfterAdhan {
+			if prayerName != "test" && config.AdhanPrayer {
 				fmt.Printf("🤲 Playing prayer after %s Adhan\n", prayerName)
 				err = playAudio(audioFiles["prayer"], "prayer")
 				if err != nil {
@@ -132,10 +166,12 @@ func updatePrayerTimes(scheduler *gocron.Scheduler) {
 	currentDate := time.Now()
 	date := data.NewDateComponents(currentDate)
 
+	method := getCalculationMethod(config.CalculationMethod)
+
 	// Configure calculation parameters using builder.
 	params := calc.NewCalculationParametersBuilder().
 		SetMadhab(madhab).
-		SetMethod(calculationMethod).
+		SetMethod(method).
 		Build()
 
 	// Calculate prayer times.
@@ -178,6 +214,18 @@ func testThreeSecondsFromNow(scheduler *gocron.Scheduler) {
 }
 
 func main() {
+	var err error
+	// Load configuration
+	if err = loadConfig(); err != nil {
+		log.Fatalf("Failed to load config: %v", err)
+	}
+
+	// Initialize coordinates
+	coordinates, err = util.NewCoordinates(config.Lan, config.Lon)
+	if err != nil {
+		log.Fatalf("Failed to initialize coordinates: %v", err)
+	}
+
 	// Schedule daily update at midnight.
 	scheduler.Every(1).Day().At("00:00").Do(func() {
 		updatePrayerTimes(scheduler)
@@ -187,14 +235,64 @@ func main() {
 	updatePrayerTimes(scheduler)
 
 	// Optional Tests
-	// testThreeSecondsFromNow(scheduler)
-	testAudioOutput()
+	testThreeSecondsFromNow(scheduler)
+	// testAudioOutput()
 
 	// Start the scheduler (blocking call).
 	scheduler.StartBlocking()
 }
 
+// getCalculationMethod converts a string calculation method to its corresponding type
+func getCalculationMethod(methodStr string) calc.CalculationMethod {
+	switch methodStr {
+	case "OTHER":
+		return calc.OTHER
+	case "MUSLIM_WORLD_LEAGUE":
+		return calc.MUSLIM_WORLD_LEAGUE
+	case "TURKEY":
+		return calc.TURKEY
+	case "EGYPTIAN":
+		return calc.EGYPTIAN
+	case "KARACHI":
+		return calc.KARACHI
+	case "UMM_AL_QURA":
+		return calc.UMM_AL_QURA
+	case "DUBAI":
+		return calc.DUBAI
+	case "MOON_SIGHTING_COMMITTEE":
+		return calc.MOON_SIGHTING_COMMITTEE
+	case "NORTH_AMERICA":
+		return calc.NORTH_AMERICA
+	case "KUWAIT":
+		return calc.KUWAIT
+	case "QATAR":
+		return calc.QATAR
+	case "SINGAPORE":
+		return calc.SINGAPORE
+	case "UOIF":
+		return calc.UOIF
+	default:
+		log.Printf("Unknown calculation method %s, defaulting to TURKEY", methodStr)
+		return calc.TURKEY
+	}
+}
+
 func onUpdateSettings() {
+	// Reload config file
+	if err := loadConfig(); err != nil {
+		log.Printf("Failed to reload config: %v", err)
+		return
+	}
+
+	// Update coordinates if lat/lon changed
+	var err error
+	coordinates, err = util.NewCoordinates(config.Lan, config.Lon)
+	if err != nil {
+		log.Printf("Failed to update coordinates: %v", err)
+		return
+	}
+
+	// Remove existing jobs and reschedule with new settings
 	scheduler.RemoveByTag("adhan")
 	updatePrayerTimes(scheduler)
 }

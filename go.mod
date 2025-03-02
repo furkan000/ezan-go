@@ -4,11 +4,12 @@ go 1.22.2
 
 require (
 	github.com/faiface/beep v1.1.0
-	github.com/go-co-op/gocron v1.37.0
 	github.com/furkan000/adhango v0.1.1
+	github.com/go-co-op/gocron v1.37.0
 )
 
 require (
+	github.com/BurntSushi/toml v1.4.0 // indirect
 	github.com/google/uuid v1.4.0 // indirect
 	github.com/hajimehoshi/go-mp3 v0.3.0 // indirect
 	github.com/hajimehoshi/oto v1.0.1 // indirect
