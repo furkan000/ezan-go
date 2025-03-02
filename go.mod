@@ -5,7 +5,7 @@ go 1.22.2
 require (
 	github.com/faiface/beep v1.1.0
 	github.com/go-co-op/gocron v1.37.0
-	github.com/mnadev/adhango v0.1.0
+	github.com/furkan000/adhango v0.1.1
 )
 
 require (

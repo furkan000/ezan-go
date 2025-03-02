@@ -9,10 +9,10 @@ import (
 	"github.com/faiface/beep"
 	"github.com/faiface/beep/mp3"
 	"github.com/faiface/beep/speaker"
+	calc "github.com/furkan000/adhango/pkg/calc"
+	data "github.com/furkan000/adhango/pkg/data"
+	util "github.com/furkan000/adhango/pkg/util"
 	"github.com/go-co-op/gocron"
-	calc "github.com/mnadev/adhango/pkg/calc"
-	data "github.com/mnadev/adhango/pkg/data"
-	util "github.com/mnadev/adhango/pkg/util"
 )
 
 var (
@@ -110,9 +110,7 @@ func updatePrayerTimes(scheduler *gocron.Scheduler) {
 	// Configure calculation parameters using builder.
 	params := calc.NewCalculationParametersBuilder().
 		SetMadhab(calc.SHAFI_HANBALI_MALIKI).
-		SetFajrAngle(18.0).
-		SetIshaAngle(17.0).
-		SetMethodAdjustments(calc.PrayerAdjustments{SunriseAdj: -7, DhuhrAdj: 5, AsrAdj: 4, MaghribAdj: 7}).
+		SetMethod(calc.TURKEY).
 		Build()
 
 	// Calculate prayer times.
