@@ -14,6 +14,7 @@ import (
 	calc "github.com/furkan000/adhango/pkg/calc"
 	data "github.com/furkan000/adhango/pkg/data"
 	util "github.com/furkan000/adhango/pkg/util"
+	"github.com/gin-gonic/gin"
 	"github.com/go-co-op/gocron"
 )
 
@@ -213,12 +214,79 @@ func testThreeSecondsFromNow(scheduler *gocron.Scheduler) {
 	scheduleAdhan(scheduler, "fajr", t)
 }
 
+// updateSettingsHandler handles POST requests to update settings
+func updateSettingsHandler(c *gin.Context) {
+	var updates map[string]interface{}
+	if err := c.BindJSON(&updates); err != nil {
+		c.JSON(400, gin.H{"error": "Invalid JSON format"})
+		return
+	}
+
+	// Read current config
+	var currentConfig map[string]interface{}
+	configBytes, err := os.ReadFile("config.toml")
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Failed to read config file"})
+		return
+	}
+	if _, err := toml.Decode(string(configBytes), &currentConfig); err != nil {
+		c.JSON(500, gin.H{"error": "Failed to parse config file"})
+		return
+	}
+
+	// Update config with new values
+	for key, value := range updates {
+		if key == "volume" {
+			// Handle volume updates separately as it's a nested structure
+			if volumeUpdates, ok := value.(map[string]interface{}); ok {
+				if currentVolume, ok := currentConfig["volume"].(map[string]interface{}); ok {
+					for k, v := range volumeUpdates {
+						currentVolume[k] = v
+					}
+				}
+			}
+		} else {
+			currentConfig[key] = value
+		}
+	}
+
+	// Convert back to TOML and write to file
+	f, err := os.Create("config.toml")
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Failed to open config file for writing"})
+		return
+	}
+	defer f.Close()
+
+	encoder := toml.NewEncoder(f)
+	if err := encoder.Encode(currentConfig); err != nil {
+		c.JSON(500, gin.H{"error": "Failed to write config file"})
+		return
+	}
+
+	// Call onUpdateSettings to apply changes
+	onUpdateSettings()
+
+	c.JSON(200, gin.H{"message": "Settings updated successfully"})
+}
+
 func main() {
 	var err error
 	// Load configuration
 	if err = loadConfig(); err != nil {
 		log.Fatalf("Failed to load config: %v", err)
 	}
+
+	// Setup Gin router
+	router := gin.Default()
+	router.POST("/settings", updateSettingsHandler)
+
+	// Start HTTP server in a goroutine
+	go func() {
+		if err := router.Run(":8080"); err != nil {
+			log.Printf("Failed to start HTTP server: %v", err)
+		}
+	}()
 
 	// Initialize coordinates
 	coordinates, err = util.NewCoordinates(config.Lan, config.Lon)
@@ -235,7 +303,7 @@ func main() {
 	updatePrayerTimes(scheduler)
 
 	// Optional Tests
-	testThreeSecondsFromNow(scheduler)
+	// testThreeSecondsFromNow(scheduler)
 	// testAudioOutput()
 
 	// Start the scheduler (blocking call).
