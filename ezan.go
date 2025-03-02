@@ -15,14 +15,22 @@ import (
 	util "github.com/mnadev/adhango/pkg/util"
 )
 
-// AdhanAudioFiles maps prayer names to their audio file paths.
-var adhanAudioFiles = map[string]string{
+var (
+	scheduler      = gocron.NewScheduler(time.Local)
+	coordinates, _ = util.NewCoordinates(52.52, 13.405)
+	// Toggle for playing prayer after adhan
+	playPrayerAfterAdhan = true
+)
+
+// audioFiles maps prayer names to their audio file paths.
+var audioFiles = map[string]string{
 	"fajr":    "audio/ezan1.mp3",
 	"dhuhr":   "audio/ezan2.mp3",
 	"asr":     "audio/ezan3.mp3",
 	"maghrib": "audio/ezan4.mp3",
 	"isha":    "audio/ezan5.mp3",
 	"test":    "audio/test.mp3",
+	"prayer":  "audio/prayer.mp3",
 }
 
 // playAudio plays the specified MP3 file.
@@ -56,7 +64,7 @@ func playAudio(filepath string) error {
 // testAudioOutput tests the audio system by playing the Fajr adhan.
 func testAudioOutput() {
 	fmt.Println("🔊 Testing audio output...")
-	err := playAudio(adhanAudioFiles["test"])
+	err := playAudio(audioFiles["test"])
 	if err != nil {
 		log.Printf("❌ Audio test failed: %v\n", err)
 	} else {
@@ -74,21 +82,26 @@ func scheduleAdhan(scheduler *gocron.Scheduler, prayerName string, prayerTime ti
 		Tag("adhan"). // Tag the job for later removal.
 		Do(func() {
 			fmt.Printf("📢 Playing %s Adhan at %v\n", prayerName, prayerTime)
-			err := playAudio(adhanAudioFiles[prayerName])
+			err := playAudio(audioFiles[prayerName])
 			if err != nil {
 				log.Printf("❌ Error playing %s Adhan: %v\n", prayerName, err)
+				return
+			}
+
+			// Play prayer after adhan only for the five daily prayers if enabled
+			if prayerName != "test" && playPrayerAfterAdhan {
+				fmt.Printf("🤲 Playing prayer after %s Adhan\n", prayerName)
+				err = playAudio(audioFiles["prayer"])
+				if err != nil {
+					log.Printf("❌ Error playing prayer after %s Adhan: %v\n", prayerName, err)
+				}
 			}
 		})
 }
 
 // updatePrayerTimes calculates and schedules prayer times for the current day.
 func updatePrayerTimes(scheduler *gocron.Scheduler) {
-	// Define coordinates for Berlin.
-	coords, err := util.NewCoordinates(52.52, 13.405)
-	if err != nil {
-		log.Printf("Error creating coordinates: %v", err)
-		return
-	}
+	// Use global coordinates
 
 	// Get current date.
 	currentDate := time.Now()
@@ -103,7 +116,7 @@ func updatePrayerTimes(scheduler *gocron.Scheduler) {
 		Build()
 
 	// Calculate prayer times.
-	prayerTimes, err := calc.NewPrayerTimes(coords, date, params)
+	prayerTimes, err := calc.NewPrayerTimes(coordinates, date, params)
 	if err != nil {
 		log.Printf("Error calculating prayer times: %v", err)
 		return
@@ -142,8 +155,6 @@ func testThreeSecondsFromNow(scheduler *gocron.Scheduler) {
 }
 
 func main() {
-	scheduler := gocron.NewScheduler(time.Local)
-
 	// Schedule daily update at midnight.
 	scheduler.Every(1).Day().At("00:00").Do(func() {
 		updatePrayerTimes(scheduler)
@@ -158,4 +169,9 @@ func main() {
 
 	// Start the scheduler (blocking call).
 	scheduler.StartBlocking()
+}
+
+func onUpdateSettings() {
+	scheduler.RemoveByTag("adhan")
+	updatePrayerTimes(scheduler)
 }
